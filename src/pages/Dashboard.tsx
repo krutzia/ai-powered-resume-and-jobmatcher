@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import ScoreCircle from "@/components/ScoreCircle";
 import SkillBadge from "@/components/SkillBadge";
-import { Target, Upload, LogOut, Loader2, FileText, Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Target, Upload, LogOut, Loader2, FileText, Sparkles, AlertTriangle, CheckCircle2, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AnalysisResult {
@@ -59,13 +59,10 @@ const Dashboard = () => {
     setLoading(true);
 
     try {
-      // Upload to storage
       const filePath = `${user.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage.from("resumes").upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // For now, we'll use the filename and let AI extract from context
-      // In production, you'd use a server-side PDF parser
       const { data: resumeData, error: insertError } = await supabase
         .from("resumes")
         .insert({ user_id: user.id, filename: file.name, file_path: filePath, extracted_text: `[Resume file: ${file.name}]` })
@@ -102,7 +99,6 @@ const Dashboard = () => {
 
       setAnalysis(data);
 
-      // Save analysis
       await supabase.from("analyses").insert({
         user_id: user.id,
         resume_id: currentResumeId,
@@ -129,7 +125,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2 font-display text-xl font-bold">
@@ -154,7 +149,6 @@ const Dashboard = () => {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Upload Section */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 font-display">
@@ -179,7 +173,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Job Description */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 font-display">
@@ -208,7 +201,6 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Results */}
         <AnimatePresence>
           {analysis && (
             <motion.div
@@ -217,7 +209,6 @@ const Dashboard = () => {
               transition={{ duration: 0.5 }}
               className="mt-8 space-y-6"
             >
-              {/* Score */}
               <Card className="shadow-elevated">
                 <CardContent className="flex flex-col items-center py-10">
                   <ScoreCircle score={analysis.match_score} />
@@ -228,7 +219,6 @@ const Dashboard = () => {
               </Card>
 
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Missing Skills */}
                 <Card className="shadow-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-display text-lg">
@@ -246,7 +236,6 @@ const Dashboard = () => {
                   </CardContent>
                 </Card>
 
-                {/* Suggested Keywords */}
                 <Card className="shadow-card">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 font-display text-lg">
@@ -261,7 +250,6 @@ const Dashboard = () => {
                 </Card>
               </div>
 
-              {/* Improvements */}
               <Card className="shadow-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-display text-lg">
@@ -282,7 +270,6 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Optimized Resume */}
               {analysis.optimized_resume && (
                 <Card className="shadow-card">
                   <CardHeader>
@@ -304,8 +291,5 @@ const Dashboard = () => {
     </div>
   );
 };
-
-// Need to import Zap at top
-import { Zap } from "lucide-react";
 
 export default Dashboard;
