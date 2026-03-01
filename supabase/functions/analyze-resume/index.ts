@@ -6,12 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const MAX_JOB_DESC_LENGTH = 15000;
+const MAX_RESUME_TEXT_LENGTH = 50000;
+
+function sanitizeText(text: string, maxLength: number): string {
+  return text.trim().slice(0, maxLength);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -20,30 +32,83 @@ serve(async (req) => {
     // Verify user
     const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!);
     const { data: { user }, error: authError } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) throw new Error("Unauthorized");
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const { resumeId, jobDescription } = await req.json();
-    if (!resumeId || !jobDescription) throw new Error("Missing resumeId or jobDescription");
+    // Parse and validate input
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Get resume
+    const { resumeId, jobDescription } = body;
+
+    if (!resumeId || typeof resumeId !== "string") {
+      return new Response(JSON.stringify({ error: "Invalid or missing resumeId" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!jobDescription || typeof jobDescription !== "string" || jobDescription.trim().length < 10) {
+      return new Response(JSON.stringify({ error: "Job description must be at least 10 characters" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sanitizedJobDesc = sanitizeText(jobDescription, MAX_JOB_DESC_LENGTH);
+
+    // UUID validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(resumeId)) {
+      return new Response(JSON.stringify({ error: "Invalid resumeId format" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Get resume (RLS: user can only access own)
     const { data: resume, error: resumeError } = await supabase
       .from("resumes")
       .select("*")
       .eq("id", resumeId)
       .eq("user_id", user.id)
       .single();
-    if (resumeError || !resume) throw new Error("Resume not found");
+    if (resumeError || !resume) {
+      return new Response(JSON.stringify({ error: "Resume not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(JSON.stringify({ error: "AI service not configured" }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const resumeText = sanitizeText(resume.extracted_text || `[Resume file: ${resume.filename}]`, MAX_RESUME_TEXT_LENGTH);
 
     const prompt = `You are an expert resume analyzer and ATS optimization specialist. Analyze the following resume against the job description and return a JSON object.
 
 Resume filename: ${resume.filename}
-Resume content: ${resume.extracted_text || "No text extracted - analyze based on filename context"}
+Resume content: ${resumeText}
 
 Job Description:
-${jobDescription}
+${sanitizedJobDesc}
 
 Return ONLY a valid JSON object with these exact fields:
 {
@@ -75,23 +140,31 @@ Be specific and actionable. If resume text is minimal, provide general guidance 
       if (aiResponse.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "30" },
         });
       }
       if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please try again later." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const errText = await aiResponse.text();
       console.error("AI error:", aiResponse.status, errText);
-      throw new Error("AI analysis failed");
+      return new Response(JSON.stringify({ error: "AI analysis temporarily unavailable" }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await aiResponse.json();
     const content = aiData.choices?.[0]?.message?.content;
-    if (!content) throw new Error("No AI response");
+    if (!content) {
+      return new Response(JSON.stringify({ error: "Empty AI response. Please retry." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Parse JSON from response (handle potential markdown wrapping)
     let parsed;
@@ -99,16 +172,28 @@ Be specific and actionable. If resume text is minimal, provide general guidance 
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(jsonStr);
     } catch {
-      throw new Error("Failed to parse AI response");
+      console.error("Failed to parse AI response:", content.slice(0, 500));
+      return new Response(JSON.stringify({ error: "Failed to parse AI response. Please retry." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(JSON.stringify(parsed), {
+    // Validate response shape
+    const result = {
+      match_score: Math.min(100, Math.max(0, Number(parsed.match_score) || 0)),
+      missing_skills: Array.isArray(parsed.missing_skills) ? parsed.missing_skills.slice(0, 50) : [],
+      suggested_keywords: Array.isArray(parsed.suggested_keywords) ? parsed.suggested_keywords.slice(0, 50) : [],
+      improvements: Array.isArray(parsed.improvements) ? parsed.improvements.slice(0, 20) : [],
+      optimized_resume: typeof parsed.optimized_resume === "string" ? parsed.optimized_resume.slice(0, 10000) : "",
+    };
+
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("analyze-resume error:", e);
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: "An unexpected error occurred. Please try again." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
