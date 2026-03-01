@@ -140,7 +140,7 @@ const Index = () => {
           <p>© 2026 ResuMatch. All rights reserved.</p>
         </div>
       </footer>
-    </div>
+    </main>
   );
 };
 
