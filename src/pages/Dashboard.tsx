@@ -86,34 +86,52 @@ const Dashboard = () => {
       return;
     }
 
+    if (jobDescription.trim().length < 10) {
+      toast({ title: "Too short", description: "Job description must be at least 10 characters.", variant: "destructive" });
+      return;
+    }
+
     setLoading(true);
     setAnalysis(null);
 
-    try {
-      const { data, error } = await supabase.functions.invoke("analyze-resume", {
-        body: { resumeId: currentResumeId, jobDescription: jobDescription.trim() },
-      });
+    const maxRetries = 2;
+    let lastError: string = "Unknown error";
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke("analyze-resume", {
+          body: { resumeId: currentResumeId, jobDescription: jobDescription.trim() },
+        });
 
-      setAnalysis(data);
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
 
-      await supabase.from("analyses").insert({
-        user_id: user.id,
-        resume_id: currentResumeId,
-        job_description: jobDescription.trim(),
-        match_score: data.match_score,
-        missing_skills: data.missing_skills,
-        suggested_keywords: data.suggested_keywords,
-        improvements: data.improvements,
-        optimized_resume: data.optimized_resume,
-      });
-    } catch (error: any) {
-      toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
+        setAnalysis(data);
+
+        await supabase.from("analyses").insert({
+          user_id: user.id,
+          resume_id: currentResumeId,
+          job_description: jobDescription.trim(),
+          match_score: data.match_score,
+          missing_skills: data.missing_skills,
+          suggested_keywords: data.suggested_keywords,
+          improvements: data.improvements,
+          optimized_resume: data.optimized_resume,
+        });
+
+        setLoading(false);
+        return;
+      } catch (error: any) {
+        lastError = error.message || "Analysis failed";
+        if (attempt < maxRetries && !lastError.includes("credits")) {
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+      }
     }
+
+    toast({ title: "Analysis failed", description: lastError, variant: "destructive" });
+    setLoading(false);
   };
 
   const handleLogout = async () => {

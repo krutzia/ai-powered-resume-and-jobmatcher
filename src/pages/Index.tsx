@@ -14,26 +14,28 @@ const features = [
 
 const Index = () => {
   return (
-    <div className="min-h-screen">
+    <main className="min-h-screen">
       {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
-              <Target className="h-4 w-4 text-primary-foreground" />
+      <header>
+        <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl" aria-label="Main navigation">
+          <div className="container flex h-16 items-center justify-between">
+            <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold" aria-label="ResuMatch home">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
+                <Target className="h-4 w-4 text-primary-foreground" aria-hidden="true" />
+              </div>
+              ResuMatch
+            </Link>
+            <div className="flex items-center gap-3">
+              <Link to="/auth">
+                <Button variant="ghost" size="sm">Log in</Button>
+              </Link>
+              <Link to="/auth?signup=true">
+                <Button size="sm" className="gradient-primary text-primary-foreground border-0">Get Started</Button>
+              </Link>
             </div>
-            ResuMatch
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link to="/auth">
-              <Button variant="ghost" size="sm">Log in</Button>
-            </Link>
-            <Link to="/auth?signup=true">
-              <Button size="sm" className="gradient-primary text-primary-foreground border-0">Get Started</Button>
-            </Link>
           </div>
-        </div>
-      </nav>
+        </nav>
+      </header>
 
       {/* Hero */}
       <section className="gradient-hero relative overflow-hidden pt-32 pb-24">
@@ -138,7 +140,7 @@ const Index = () => {
           <p>© 2026 ResuMatch. All rights reserved.</p>
         </div>
       </footer>
-    </div>
+    </main>
   );
 };
 
