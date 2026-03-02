@@ -152,6 +152,9 @@ const Dashboard = () => {
             ResuMatch
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>
+              Jobs
+            </Button>
             <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-1" /> Sign out
