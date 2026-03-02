@@ -1,1 +1,7 @@
 project_id = "gdvucpfkdeemvsbcedoc"
+
+[functions.analyze-resume]
+verify_jwt = false
+
+[functions.fetch-jobs]
+verify_jwt = false
