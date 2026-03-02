@@ -30,7 +30,15 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify user
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!anonKey) {
+      console.error("SUPABASE_ANON_KEY is not configured");
+      return new Response(JSON.stringify({ error: "Server configuration error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const anonClient = createClient(supabaseUrl, anonKey);
     const { data: { user }, error: authError } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
