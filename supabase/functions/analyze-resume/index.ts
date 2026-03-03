@@ -29,7 +29,6 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Create auth-aware client for user verification
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -43,10 +42,8 @@ serve(async (req) => {
       });
     }
 
-    // Service role client for DB operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse and validate input
     let body: Record<string, unknown>;
     try {
       body = await req.json();
@@ -75,7 +72,6 @@ serve(async (req) => {
 
     const sanitizedJobDesc = sanitizeText(jobDescription, MAX_JOB_DESC_LENGTH);
 
-    // UUID validation
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(resumeId)) {
       return new Response(JSON.stringify({ error: "Invalid resumeId format" }), {
@@ -84,7 +80,6 @@ serve(async (req) => {
       });
     }
 
-    // Get resume (RLS: user can only access own)
     const { data: resume, error: resumeError } = await supabase
       .from("resumes")
       .select("*")
@@ -119,14 +114,24 @@ ${sanitizedJobDesc}
 
 Return ONLY a valid JSON object with these exact fields:
 {
-  "match_score": <number 0-100>,
+  "match_score": <number 0-100 representing ATS match BEFORE optimization>,
+  "optimized_score": <number 0-100 representing estimated ATS match AFTER optimization>,
   "missing_skills": [<array of missing skill strings>],
   "suggested_keywords": [<array of keyword strings to add>],
   "improvements": [<array of improvement suggestion strings>],
-  "optimized_resume": "<optimized version of resume text with improvements applied>"
+  "optimized_resume": "<optimized version of resume text with improvements applied>",
+  "original_resume": "<cleaned up version of the original resume text as-is>",
+  "ai_insights": [
+    {
+      "category": "<Skills|Summary|Experience|Projects|Formatting>",
+      "change": "<what was changed>",
+      "reason": "<why it was changed>",
+      "job_alignment": "<which job requirement it aligns with>"
+    }
+  ]
 }
 
-Be specific and actionable. If resume text is minimal, provide general guidance based on the job description requirements.`;
+The optimized_score should always be higher than match_score. Be specific and actionable. If resume text is minimal, provide general guidance based on the job description requirements. Provide at least 3 ai_insights entries.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -173,7 +178,6 @@ Be specific and actionable. If resume text is minimal, provide general guidance 
       });
     }
 
-    // Parse JSON from response (handle potential markdown wrapping)
     let parsed;
     try {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -186,13 +190,20 @@ Be specific and actionable. If resume text is minimal, provide general guidance 
       });
     }
 
-    // Validate response shape
     const result = {
       match_score: Math.min(100, Math.max(0, Number(parsed.match_score) || 0)),
+      optimized_score: Math.min(100, Math.max(0, Number(parsed.optimized_score) || Math.min(100, (Number(parsed.match_score) || 0) + 20))),
       missing_skills: Array.isArray(parsed.missing_skills) ? parsed.missing_skills.slice(0, 50) : [],
       suggested_keywords: Array.isArray(parsed.suggested_keywords) ? parsed.suggested_keywords.slice(0, 50) : [],
       improvements: Array.isArray(parsed.improvements) ? parsed.improvements.slice(0, 20) : [],
       optimized_resume: typeof parsed.optimized_resume === "string" ? parsed.optimized_resume.slice(0, 10000) : "",
+      original_resume: typeof parsed.original_resume === "string" ? parsed.original_resume.slice(0, 10000) : resumeText,
+      ai_insights: Array.isArray(parsed.ai_insights) ? parsed.ai_insights.slice(0, 30).map((i: any) => ({
+        category: String(i.category || "General"),
+        change: String(i.change || ""),
+        reason: String(i.reason || ""),
+        job_alignment: String(i.job_alignment || ""),
+      })) : [],
     };
 
     return new Response(JSON.stringify(result), {
