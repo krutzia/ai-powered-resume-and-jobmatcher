@@ -1,24 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { JobListing, JobMatchService } from "./jobMatchService.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Mock job providers
-interface JobListing {
-  provider: string;
-  title: string;
-  company: string;
-  location: string;
-  work_type: "remote" | "onsite" | "hybrid";
-  experience_level: "entry" | "mid" | "senior" | "lead" | "executive";
-  required_skills: string[];
-  description: string;
-  apply_url: string;
-  source_tag: string;
-}
 
 function fetchLinkedInJobs(): JobListing[] {
   return [
@@ -52,26 +39,6 @@ function fetchWellfoundJobs(): JobListing[] {
     { provider: "wellfound", title: "Product Designer", company: "EdTech Startup", location: "Remote", work_type: "remote", experience_level: "mid", required_skills: ["Figma", "User Research", "Prototyping", "Design Systems", "HTML/CSS", "Accessibility"], description: "Design intuitive learning experiences for the next generation of students.", apply_url: "https://wellfound.com/jobs/3", source_tag: "Wellfound" },
     { provider: "wellfound", title: "Infrastructure Engineer", company: "FinTech Startup", location: "Austin, TX", work_type: "remote", experience_level: "senior", required_skills: ["Go", "Kubernetes", "AWS", "Terraform", "PostgreSQL", "Security"], description: "Build secure, compliant infrastructure for a rapidly growing fintech company.", apply_url: "https://wellfound.com/jobs/4", source_tag: "Wellfound" },
   ];
-}
-
-function calculateMatchScore(resumeSkills: string[], jobSkills: string[]): { score: number; matched: string[]; missing: string[] } {
-  const normalizedResume = resumeSkills.map(s => s.toLowerCase().trim());
-  const matched: string[] = [];
-  const missing: string[] = [];
-
-  for (const skill of jobSkills) {
-    const normalizedSkill = skill.toLowerCase().trim();
-    const isMatch = normalizedResume.some(rs =>
-      rs.includes(normalizedSkill) || normalizedSkill.includes(rs) ||
-      // Fuzzy: check partial overlap
-      rs.split(/[\s/]+/).some(part => normalizedSkill.includes(part) && part.length > 2)
-    );
-    if (isMatch) matched.push(skill);
-    else missing.push(skill);
-  }
-
-  const score = jobSkills.length > 0 ? Math.round((matched.length / jobSkills.length) * 100) : 0;
-  return { score, matched, missing };
 }
 
 serve(async (req) => {
@@ -156,8 +123,19 @@ serve(async (req) => {
 
     // Calculate match scores
     const jobsWithScores = allJobs.map(job => {
-      const { score, matched, missing } = calculateMatchScore(resumeSkills, job.required_skills);
-      return { ...job, match_score: score, matched_skills: matched, missing_skills: missing };
+      const matchResult = JobMatchService.scoreJobAgainstResume({
+        resumeText,
+        resumeSkills,
+        job,
+      });
+
+      return {
+        ...job,
+        match_score: matchResult.overallScore,
+        matched_skills: matchResult.matchedSkills,
+        missing_skills: matchResult.missingSkills,
+        match_details: matchResult,
+      };
     });
 
     // Sort by match score descending
