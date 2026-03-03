@@ -7,15 +7,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import ScoreCircle from "@/components/ScoreCircle";
 import SkillBadge from "@/components/SkillBadge";
-import { Target, Upload, LogOut, Loader2, FileText, Sparkles, AlertTriangle, CheckCircle2, Zap } from "lucide-react";
+import ATSScoreImpact from "@/components/ATSScoreImpact";
+import ResumeComparison from "@/components/ResumeComparison";
+import AIInsightsPanel from "@/components/AIInsightsPanel";
+import DownloadResumeButton from "@/components/DownloadResumeButton";
+import { Target, Upload, LogOut, Loader2, FileText, Sparkles, AlertTriangle, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+interface AIInsight {
+  category: string;
+  change: string;
+  reason: string;
+  job_alignment: string;
+}
 
 interface AnalysisResult {
   match_score: number;
+  optimized_score: number;
   missing_skills: string[];
   suggested_keywords: string[];
   improvements: string[];
   optimized_resume: string;
+  original_resume: string;
+  ai_insights: AIInsight[];
 }
 
 const Dashboard = () => {
@@ -44,7 +58,7 @@ const Dashboard = () => {
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     const validTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
     if (!validTypes.includes(file.type)) {
       toast({ title: "Invalid file type", description: "Please upload a PDF or DOCX file.", variant: "destructive" });
@@ -68,7 +82,7 @@ const Dashboard = () => {
         .insert({ user_id: user.id, filename: file.name, file_path: filePath, extracted_text: `[Resume file: ${file.name}]` })
         .select()
         .single();
-      
+
       if (insertError) throw insertError;
       setCurrentResumeId(resumeData.id);
       setResumeText(`Uploaded: ${file.name}`);
@@ -85,7 +99,6 @@ const Dashboard = () => {
       toast({ title: "Missing info", description: "Please upload a resume and paste a job description.", variant: "destructive" });
       return;
     }
-
     if (jobDescription.trim().length < 10) {
       toast({ title: "Too short", description: "Job description must be at least 10 characters.", variant: "destructive" });
       return;
@@ -95,14 +108,13 @@ const Dashboard = () => {
     setAnalysis(null);
 
     const maxRetries = 2;
-    let lastError: string = "Unknown error";
+    let lastError = "Unknown error";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke("analyze-resume", {
           body: { resumeId: currentResumeId, jobDescription: jobDescription.trim() },
         });
-
         if (error) throw error;
         if (data.error) throw new Error(data.error);
 
@@ -170,6 +182,7 @@ const Dashboard = () => {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* Upload Card */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 font-display">
@@ -187,13 +200,14 @@ const Dashboard = () => {
               </label>
               {resumeText && (
                 <div className="mt-3 flex items-center gap-2 rounded-lg bg-accent/10 p-3 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-accent" />
+                  <Sparkles className="h-4 w-4 text-accent" />
                   {resumeText}
                 </div>
               )}
             </CardContent>
           </Card>
 
+          {/* Job Description Card */}
           <Card className="shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 font-display">
@@ -222,6 +236,7 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Analysis Results */}
         <AnimatePresence>
           {analysis && (
             <motion.div
@@ -230,15 +245,13 @@ const Dashboard = () => {
               transition={{ duration: 0.5 }}
               className="mt-8 space-y-6"
             >
-              <Card className="shadow-elevated">
-                <CardContent className="flex flex-col items-center py-10">
-                  <ScoreCircle score={analysis.match_score} />
-                  <p className="mt-4 text-center text-sm text-muted-foreground max-w-md">
-                    Your resume matches <strong>{analysis.match_score}%</strong> of the job requirements.
-                  </p>
-                </CardContent>
-              </Card>
+              {/* ATS Score Impact */}
+              <ATSScoreImpact
+                beforeScore={analysis.match_score}
+                afterScore={analysis.optimized_score}
+              />
 
+              {/* Missing Skills & Keywords */}
               <div className="grid gap-6 md:grid-cols-2">
                 <Card className="shadow-card">
                   <CardHeader>
@@ -271,6 +284,7 @@ const Dashboard = () => {
                 </Card>
               </div>
 
+              {/* Improvements */}
               <Card className="shadow-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-display text-lg">
@@ -291,19 +305,24 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
+              {/* Side-by-Side Comparison */}
               {analysis.optimized_resume && (
-                <Card className="shadow-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-display text-lg">
-                      <CheckCircle2 className="h-5 w-5 text-score-excellent" /> Optimized Resume Output
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="rounded-xl bg-muted p-4 text-sm leading-relaxed whitespace-pre-wrap">
-                      {analysis.optimized_resume}
-                    </div>
-                  </CardContent>
-                </Card>
+                <>
+                  <ResumeComparison
+                    originalResume={analysis.original_resume}
+                    optimizedResume={analysis.optimized_resume}
+                    suggestedKeywords={analysis.suggested_keywords}
+                  />
+
+                  <div className="flex justify-center">
+                    <DownloadResumeButton optimizedResume={analysis.optimized_resume} />
+                  </div>
+                </>
+              )}
+
+              {/* AI Insights */}
+              {analysis.ai_insights?.length > 0 && (
+                <AIInsightsPanel insights={analysis.ai_insights} />
               )}
             </motion.div>
           )}
