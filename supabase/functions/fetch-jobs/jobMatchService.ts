@@ -12,17 +12,23 @@ export interface JobListing {
 }
 
 export interface MatchSectionScores {
-  skills: number;
-  experience: number;
-  tools: number;
+  required: number;
+  preferred: number;
   keywords: number;
 }
 
 export interface MatchResult {
   overallScore: number;
-  matchedSkills: string[];
-  missingSkills: string[];
-  partialMatches: string[];
+  requiredMatchScore: number;
+  preferredMatchScore: number;
+  keywordMatchScore: number;
+  matchedRequiredSkills: string[];
+  missingRequiredSkills: string[];
+  matchedPreferredSkills: string[];
+  missingPreferredSkills: string[];
+  matchedSkills: string[]; // aggregated (required + preferred) for backwards compatibility
+  missingSkills: string[]; // aggregated (required + preferred) for backwards compatibility
+  partialMatches: string[]; // aggregated partials across required + preferred
   sectionScores: MatchSectionScores;
 }
 
@@ -118,30 +124,26 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function scoreSkills(
+function scoreSkillGroup(
   resumeSkills: string[],
   jobSkills: string[],
-  resumeText: string
+  resumeText: string,
+  missingPenalty: number
 ): {
-  matchedSkills: string[];
-  missingSkills: string[];
-  partialMatches: string[];
-  skillsScore: number;
-  toolsScore: number;
+  matched: string[];
+  missing: string[];
+  partial: string[];
+  score: number;
 } {
   const normalizedResumeSkills = resumeSkills.map((s) => normalizeSkill(s));
   const resumeTextLower = resumeText.toLowerCase();
 
-  const matchedSkills: string[] = [];
-  const missingSkills: string[] = [];
-  const partialMatches: string[] = [];
+  const matched: string[] = [];
+  const missing: string[] = [];
+  const partial: string[] = [];
 
   let fullMatchCount = 0;
   let partialMatchCount = 0;
-
-  let toolTotal = 0;
-  let toolFullMatchCount = 0;
-  let toolPartialMatchCount = 0;
 
   for (const jobSkill of jobSkills) {
     const normalizedJobSkill = normalizeSkill(jobSkill);
@@ -163,40 +165,28 @@ function scoreSkills(
           .some((part) => part.length > 2 && resumeTextLower.includes(part));
     }
 
-    const isTool = TOOL_KEYWORDS.has(normalizedJobSkill);
-    if (isTool) {
-      toolTotal += 1;
-    }
-
     if (hasExact) {
-      matchedSkills.push(jobSkill);
+      matched.push(jobSkill);
       fullMatchCount += 1;
-      if (isTool) toolFullMatchCount += 1;
     } else if (hasPartial) {
-      partialMatches.push(jobSkill);
+      partial.push(jobSkill);
       partialMatchCount += 1;
-      if (isTool) toolPartialMatchCount += 1;
     } else {
-      missingSkills.push(jobSkill);
+      missing.push(jobSkill);
     }
   }
 
   const denominator = jobSkills.length || 1;
-  const rawSkillsScore =
-    ((fullMatchCount + partialMatchCount * 0.5) / denominator) * 100;
-
-  let rawToolsScore = 0;
-  if (toolTotal > 0) {
-    rawToolsScore =
-      ((toolFullMatchCount + toolPartialMatchCount * 0.5) / toolTotal) * 100;
-  }
+  const rawFraction =
+    (fullMatchCount + partialMatchCount * 0.5 - missing.length * missingPenalty) /
+    denominator;
+  const rawScore = Math.max(0, Math.min(1, rawFraction)) * 100;
 
   return {
-    matchedSkills,
-    missingSkills,
-    partialMatches,
-    skillsScore: clampScore(rawSkillsScore),
-    toolsScore: clampScore(rawToolsScore),
+    matched,
+    missing,
+    partial,
+    score: clampScore(rawScore),
   };
 }
 
@@ -268,6 +258,55 @@ function scoreKeywords(resumeText: string, description: string): number {
   return clampScore((matches / descTokens.length) * 100);
 }
 
+function parseJobSkillsFromDescription(
+  description: string,
+  fallbackRequired: string[]
+): { requiredSkills: string[]; preferredSkills: string[] } {
+  const lines = description.split(/\r?\n/).map((l) => l.trim());
+  const required: string[] = [];
+  const preferred: string[] = [];
+
+  let current: "required" | "preferred" | null = null;
+
+  const requiredHeading = /(required skills?|must[-\s]?have|mandatory)/i;
+  const preferredHeading = /(preferred|nice to have)/i;
+
+  for (const line of lines) {
+    if (!line) {
+      current = null;
+      continue;
+    }
+
+    if (requiredHeading.test(line)) {
+      current = "required";
+      continue;
+    }
+    if (preferredHeading.test(line)) {
+      current = "preferred";
+      continue;
+    }
+
+    if (!current) continue;
+
+    const parts = line
+      .replace(/^[•\-*]+\s*/, "")
+      .split(/[,;•]/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 1);
+
+    for (const part of parts) {
+      if (current === "required") required.push(part);
+      else preferred.push(part);
+    }
+  }
+
+  const requiredSkills =
+    required.length > 0 ? Array.from(new Set(required)) : fallbackRequired;
+  const preferredSkills = Array.from(new Set(preferred));
+
+  return { requiredSkills, preferredSkills };
+}
+
 export class JobMatchService {
   static scoreJobAgainstResume(params: {
     resumeText: string;
@@ -276,33 +315,61 @@ export class JobMatchService {
   }): MatchResult {
     const { resumeText, resumeSkills, job } = params;
 
-    const {
-      matchedSkills,
-      missingSkills,
-      partialMatches,
-      skillsScore,
-      toolsScore,
-    } = scoreSkills(resumeSkills, job.required_skills, resumeText);
+    const { requiredSkills, preferredSkills } = parseJobSkillsFromDescription(
+      job.description,
+      job.required_skills
+    );
 
-    const experienceScore = scoreExperience(resumeText, job.experience_level);
-    const keywordsScore = scoreKeywords(resumeText, job.description);
+    const requiredGroup = scoreSkillGroup(
+      resumeSkills,
+      requiredSkills,
+      resumeText,
+      0.75
+    );
+
+    const preferredGroup = scoreSkillGroup(
+      resumeSkills,
+      preferredSkills,
+      resumeText,
+      0.25
+    );
+
+    const keywordScore = scoreKeywords(resumeText, job.description);
+
+    const requiredMatchScore = requiredGroup.score;
+    const preferredMatchScore = preferredGroup.score;
 
     const sectionScores: MatchSectionScores = {
-      skills: skillsScore,
-      experience: experienceScore,
-      tools: toolsScore,
-      keywords: keywordsScore,
+      required: requiredMatchScore,
+      preferred: preferredMatchScore,
+      keywords: keywordScore,
     };
 
     const overallScore = clampScore(
-      skillsScore * 0.5 +
-        experienceScore * 0.2 +
-        toolsScore * 0.2 +
-        keywordsScore * 0.1
+      requiredMatchScore * 0.6 +
+        preferredMatchScore * 0.2 +
+        keywordScore * 0.2
+    );
+
+    const matchedSkills = Array.from(
+      new Set([...requiredGroup.matched, ...preferredGroup.matched])
+    );
+    const missingSkills = Array.from(
+      new Set([...requiredGroup.missing, ...preferredGroup.missing])
+    );
+    const partialMatches = Array.from(
+      new Set([...requiredGroup.partial, ...preferredGroup.partial])
     );
 
     return {
       overallScore,
+      requiredMatchScore,
+      preferredMatchScore,
+      keywordMatchScore: keywordScore,
+      matchedRequiredSkills: requiredGroup.matched,
+      missingRequiredSkills: requiredGroup.missing,
+      matchedPreferredSkills: preferredGroup.matched,
+      missingPreferredSkills: preferredGroup.missing,
       matchedSkills,
       missingSkills,
       partialMatches,
