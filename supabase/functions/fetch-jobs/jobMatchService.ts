@@ -15,6 +15,7 @@ export interface MatchSectionScores {
   required: number;
   preferred: number;
   keywords: number;
+  experience: number;
 }
 
 export interface MatchResult {
@@ -22,6 +23,7 @@ export interface MatchResult {
   requiredMatchScore: number;
   preferredMatchScore: number;
   keywordMatchScore: number;
+  experienceScore: number;
   matchedRequiredSkills: string[];
   missingRequiredSkills: string[];
   matchedPreferredSkills: string[];
@@ -99,6 +101,12 @@ const STOP_WORDS = new Set([
   "junior",
   "mid",
 ]);
+
+// Scoring weights (no magic numbers)
+const REQUIRED_WEIGHT = 0.5;
+const PREFERRED_WEIGHT = 0.15;
+const KEYWORD_WEIGHT = 0.15;
+const EXPERIENCE_WEIGHT = 0.2;
 
 function normalizeSkill(raw: string): string {
   const s = raw.toLowerCase().trim();
@@ -258,6 +266,226 @@ function scoreKeywords(resumeText: string, description: string): number {
   return clampScore((matches / descTokens.length) * 100);
 }
 
+/**
+ * Extract minimum required years of experience from a job description.
+ * Examples:
+ * - "3+ years"
+ * - "minimum 2 years"
+ * - "at least 4 years"
+ * - "2-4 years"
+ * - "5 years of experience"
+ * - "3 years React"
+ * - "4+ years in Node.js"
+ */
+export function extractRequiredExperience(jobDescription: string): number | null {
+  const text = jobDescription.toLowerCase();
+
+  // Single pass regex for the common "X years" patterns, with optional range.
+  const yearsPattern =
+    /(?:minimum\s+|at\s+least\s+)?(\d+)\s*(?:[-–]\s*(\d+))?\s*\+?\s+years?/g;
+
+  let match: RegExpExecArray | null;
+  let best: number | null = null;
+
+  // eslint-disable-next-line no-cond-assign
+  while ((match = yearsPattern.exec(text)) !== null) {
+    const minStr = match[1];
+    const maxStr = match[2];
+
+    const min = parseInt(minStr, 10);
+    if (Number.isNaN(min)) continue;
+
+    let candidate = min;
+    if (maxStr) {
+      const max = parseInt(maxStr, 10);
+      if (!Number.isNaN(max)) {
+        // For ranges like "2-4 years", we use the minimum requirement (2)
+        candidate = Math.min(min, max);
+      }
+    }
+
+    best = best === null ? candidate : Math.min(best, candidate);
+  }
+
+  return best;
+}
+
+/**
+ * Extract total years of experience from resume text.
+ * - Uses both explicit "X years" mentions and date ranges.
+ * - Aggregates multiple ranges and converts months to years.
+ * - Returns null when it cannot detect reasonable experience.
+ */
+export function extractResumeExperience(resumeText: string): number | null {
+  const text = resumeText.toLowerCase();
+
+  // 1) Explicit "X years" mentions
+  const yearsMentionPattern =
+    /\b(\d+)\s*\+?\s*(?:years?|yrs)\b(?:\s+of\s+experience)?/g;
+  let explicitMaxYears = 0;
+  let m: RegExpExecArray | null;
+
+  // eslint-disable-next-line no-cond-assign
+  while ((m = yearsMentionPattern.exec(text)) !== null) {
+    const value = parseInt(m[1], 10);
+    if (!Number.isNaN(value)) {
+      explicitMaxYears = Math.max(explicitMaxYears, value);
+    }
+  }
+
+  // 2) Date ranges (e.g., "Jan 2020 - Present", "2021 - 2024")
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+  const currentMonth = now.getUTCMonth() + 1; // 1-12
+
+  const monthMap: Record<string, number> = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  };
+
+  function parseMonth(token: string | undefined): number | null {
+    if (!token) return null;
+    const key = token.toLowerCase();
+    return monthMap[key] ?? null;
+  }
+
+  let totalMonths = 0;
+
+  // Month + year ranges, e.g. "Jan 2020 - Mar 2023", "Feb 2020 – Present"
+  const monthYearRangePattern =
+    /\b([A-Za-z]{3,9})\s+(\d{4})\s*[–-]\s*(?:([A-Za-z]{3,9})\s+)?(\d{4}|present|current)\b/g;
+
+  // eslint-disable-next-line no-cond-assign
+  while ((m = monthYearRangePattern.exec(resumeText)) !== null) {
+    const startMonthName = m[1];
+    const startYearStr = m[2];
+    const endMonthName = m[3];
+    const endYearOrPresent = m[4];
+
+    const startYear = parseInt(startYearStr, 10);
+    if (Number.isNaN(startYear)) continue;
+    const startMonth = parseMonth(startMonthName) ?? 1;
+
+    let endYear: number;
+    let endMonth: number;
+
+    if (/present|current/i.test(endYearOrPresent)) {
+      endYear = currentYear;
+      endMonth = currentMonth;
+    } else {
+      endYear = parseInt(endYearOrPresent, 10);
+      if (Number.isNaN(endYear)) continue;
+      endMonth = parseMonth(endMonthName) ?? 12;
+    }
+
+    const months =
+      (endYear - startYear) * 12 + (endMonth - startMonth + 1);
+    if (months > 0) totalMonths += months;
+  }
+
+  // Year-only ranges, e.g. "2020 - 2023", "2018 – Present"
+  const yearOnlyRangePattern =
+    /\b(\d{4})\s*[–-]\s*(\d{4}|present|current)\b/g;
+
+  // eslint-disable-next-line no-cond-assign
+  while ((m = yearOnlyRangePattern.exec(resumeText)) !== null) {
+    const startYearStr = m[1];
+    const endYearOrPresent = m[2];
+
+    const startYear = parseInt(startYearStr, 10);
+    if (Number.isNaN(startYear)) continue;
+
+    let endYear: number;
+    if (/present|current/i.test(endYearOrPresent)) {
+      endYear = currentYear;
+    } else {
+      endYear = parseInt(endYearOrPresent, 10);
+      if (Number.isNaN(endYear)) continue;
+    }
+
+    const months = (endYear - startYear + 1) * 12;
+    if (months > 0) totalMonths += months;
+  }
+
+  let yearsFromRanges = 0;
+  if (totalMonths > 0) {
+    yearsFromRanges = totalMonths / 12;
+  }
+
+  const combinedYears =
+    yearsFromRanges > 0 && explicitMaxYears > 0
+      ? Math.max(yearsFromRanges, explicitMaxYears)
+      : yearsFromRanges > 0
+      ? yearsFromRanges
+      : explicitMaxYears;
+
+  if (combinedYears <= 0) return null;
+
+  // Round to one decimal place as a reasonable approximation
+  const rounded = Math.round(combinedYears * 10) / 10;
+  return rounded > 0 ? rounded : null;
+}
+
+/**
+ * Compute an experience match score between required and actual years.
+ * - required === null => neutral score (100)
+ * - actual === null => moderate penalty (50)
+ * - actual >= required => full score (100)
+ * - actual between 80–99% of required => proportional scaling
+ * - actual < 80% of required => stronger penalty
+ */
+export function calculateExperienceScore(
+  required: number | null,
+  actual: number | null
+): number {
+  if (required === null || required <= 0) {
+    return 100;
+  }
+
+  if (actual === null || actual <= 0) {
+    return 50;
+  }
+
+  const ratio = actual / required;
+
+  if (ratio >= 1) {
+    return 100;
+  }
+
+  const MIN_GOOD_RATIO = 0.8;
+
+  if (ratio >= MIN_GOOD_RATIO) {
+    // Smooth scaling between 80 and 100 when 80–100% of requirement is met
+    return clampScore(ratio * 100);
+  }
+
+  // Stronger penalty when significantly below requirement
+  const penalized = ratio * 80;
+  return clampScore(penalized);
+}
+
 function parseJobSkillsFromDescription(
   description: string,
   fallbackRequired: string[]
@@ -336,6 +564,10 @@ export class JobMatchService {
 
     const keywordScore = scoreKeywords(resumeText, job.description);
 
+    const requiredYears = extractRequiredExperience(job.description);
+    const actualYears = extractResumeExperience(resumeText);
+    const experienceScore = calculateExperienceScore(requiredYears, actualYears);
+
     const requiredMatchScore = requiredGroup.score;
     const preferredMatchScore = preferredGroup.score;
 
@@ -343,12 +575,14 @@ export class JobMatchService {
       required: requiredMatchScore,
       preferred: preferredMatchScore,
       keywords: keywordScore,
+      experience: experienceScore,
     };
 
     const overallScore = clampScore(
-      requiredMatchScore * 0.6 +
-        preferredMatchScore * 0.2 +
-        keywordScore * 0.2
+      requiredMatchScore * REQUIRED_WEIGHT +
+        preferredMatchScore * PREFERRED_WEIGHT +
+        keywordScore * KEYWORD_WEIGHT +
+        experienceScore * EXPERIENCE_WEIGHT
     );
 
     const matchedSkills = Array.from(
@@ -366,6 +600,7 @@ export class JobMatchService {
       requiredMatchScore,
       preferredMatchScore,
       keywordMatchScore: keywordScore,
+      experienceScore,
       matchedRequiredSkills: requiredGroup.matched,
       missingRequiredSkills: requiredGroup.missing,
       matchedPreferredSkills: preferredGroup.matched,
