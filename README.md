@@ -157,3 +157,11 @@ supabase/
     fetch-jobs/      # Job fetch & scoring
   migrations/        # Database schema & migrations
 ```
+
+---
+
+## Author
+
+Kashish  
+B.Tech Computer Science  
+JSS Academy of Technical Education, Noida
