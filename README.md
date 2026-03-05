@@ -39,6 +39,28 @@ You upload your resume (PDF or DOCX), paste in a job description, and the app:
 
 ---
 
+## Screenshots
+
+### Landing Page
+![Landing Page](screenshots/Landing%20Page.png)
+
+### Authentication
+![Authentication](screenshots/Authentication.png)
+
+### Dashboard
+![Dashboard](screenshots/Dashboard.png)
+
+### AI Analysis
+![AI Analysis](screenshots/AI%20Analysis.png)
+
+### Resume Comparison
+![Comparison](screenshots/Resume%20Comparison.png)
+
+### Optimized Resume Download
+![Download](screenshots/Optimized%20Resume.png)
+
+---
+
 ## Tech stack
 
 - **Frontend**
