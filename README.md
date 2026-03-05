@@ -1,69 +1,66 @@
 ## ResuMatch – AI-Powered Resume & Job Matcher
 
-ResuMatch helps job seekers **analyze their resume against any job description**, get an **ATS-style match score**, and discover **curated job opportunities** that match their skills.  
+ResuMatch is a small app I’m building to make it easier to understand how well your resume fits a specific job, and to discover good job matches based on your skills.
 
-Upload a PDF/DOCX resume, paste a job description, and ResuMatch will:
+You upload your resume (PDF or DOCX), paste in a job description, and the app:
 
-- **Score your match** before and after optimization  
-- **Highlight missing skills & keywords**  
-- **Generate an optimized resume version**  
-- **Provide AI insights** on what changed and why  
-- **Recommend matched jobs** from multiple sources with per-job match scores  
+- Gives you a **match score** before and after optimization  
+- Shows **missing skills and important keywords**  
+- Suggests an **optimized version of your resume**  
+- Explains **what changed and why** using AI insights  
+- Surfaces **recommended jobs** from different sources with their own match scores  
 
 ---
 
 ## Features
 
-- **AI Resume Analysis**
-  - Upload resume (PDF/DOCX) with validation (type & size)
-  - Secure storage in Supabase Storage
-  - AI-powered comparison of resume vs. job description
-  - Match score before/after optimization (ATS-style)
-  - Detailed improvement suggestions
-  - Side-by-side original vs. optimized resume view
-  - Download optimized resume
+- **AI resume analysis**
+  - Upload your resume (PDF/DOCX) with basic validation
+  - Compare resume vs. job description using an AI model
+  - See a match score before and after optimization
+  - Get concrete suggestions and a side‑by‑side comparison
+  - Download the optimized resume text
 
-- **Job Recommendations**
-  - Fetches jobs via Supabase Edge Function (`fetch-jobs`)
-  - Per-job **match score** and **matched/missing skills**
-  - Smart filters: match %, location, work type, experience level, provider
-  - Supports multiple sources (e.g. LinkedIn, Instahyre, Naukri, Wellfound)
-  - Quick-apply links + local “saved job” state
+- **Job recommendations**
+  - Fetch jobs through a Supabase Edge Function (`fetch-jobs`)
+  - Each job gets a match score plus matched/missing skills
+  - Filter by match %, location, work type, experience level, and source
+  - Quick apply links and a simple “saved job” toggle (local for now)
 
-- **User Accounts & Dashboard**
-  - Email/password authentication with Supabase Auth
-  - Protected routes for Dashboard & Jobs
-  - Stores analyses in Supabase (resumes, analyses tables)
+- **Accounts and dashboard**
+  - Email/password auth via Supabase Auth
+  - Protected dashboard and jobs pages
+  - Analyses are stored so they can be reused later
 
-- **Modern UI/UX**
+- **Modern UI**
   - React + Vite + TypeScript
-  - shadcn-ui + Radix primitives
-  - Tailwind CSS + animations + Framer Motion
+  - shadcn-ui + Radix UI + Tailwind CSS
+  - Framer Motion for subtle animations
 
 ---
 
-## Tech Stack
+## Tech stack
 
 - **Frontend**
-  - React 18, TypeScript
+  - React 18 + TypeScript
   - Vite
   - React Router
   - Tailwind CSS, shadcn-ui, Radix UI, Framer Motion
-  - TanStack Query for data fetching
+  - TanStack Query for data fetching and caching
 
-- **Backend / Infra**
+- **Backend / infra**
   - **Supabase**
     - Auth (email/password)
     - Postgres (resumes, analyses, jobs, etc.)
     - Storage (resume files)
-    - Edge Functions:
-      - `analyze-resume` – calls AI provider to score/optimize resumes
+    - Edge functions:
+      - `analyze-resume` – calls an AI provider to score/optimize resumes
       - `fetch-jobs` – fetches and scores jobs against resume skills
-  - AI provider via HTTPS (configured with `AI_API_KEY` in Supabase function env)
+  - External AI provider configured via `AI_API_KEY` on the Supabase side
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
@@ -75,7 +72,7 @@ Upload a PDF/DOCX resume, paste a job description, and ResuMatch will:
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `AI_API_KEY` (for the AI model used in `analyze-resume`)
 
-### 1. Clone & Install
+### 1. Clone & install
 
 ```bash
 git clone <YOUR_GIT_URL>
@@ -83,7 +80,7 @@ cd ai-powered-resume-and-jobmatcher
 npm install
 ```
 
-### 2. Configure Environment (Frontend)
+### 2. Configure environment (frontend)
 
 Create a `.env` file in the project root (not committed to Git) and set at least:
 
@@ -94,7 +91,7 @@ VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
 
 Make sure these match the Supabase project where your database, storage, and edge functions live.
 
-### 3. Configure Supabase Edge Functions
+### 3. Configure Supabase edge functions
 
 In your Supabase project:
 
@@ -109,7 +106,7 @@ In your Supabase project:
 
 Also apply the SQL migrations under `supabase/migrations` to create the required tables (e.g. `resumes`, `analyses`, any job tables if present).
 
-### 4. Run the App Locally
+### 4. Run the app locally
 
 ```bash
 npm run dev
@@ -122,7 +119,7 @@ Open the URL printed in the terminal (typically `http://localhost:5173`) and:
 3. Paste a job description and run an analysis  
 4. View recommended jobs on the Jobs page  
 
-### 5. Run Tests
+### 5. Run tests
 
 ```bash
 npm test
@@ -130,7 +127,7 @@ npm test
 
 ---
 
-## Project Structure (High Level)
+## Project structure (high level)
 
 ```text
 src/
@@ -160,32 +157,3 @@ supabase/
     fetch-jobs/      # Job fetch & scoring
   migrations/        # Database schema & migrations
 ```
-
----
-
-## Deployment
-
-You can deploy the frontend to any modern static hosting provider (e.g. **Vercel**, **Netlify**, **Cloudflare Pages**) by building the app and serving the `dist` folder:
-
-```bash
-npm run build
-```
-
-For production:
-
-- Deploy Supabase functions (`analyze-resume`, `fetch-jobs`) to your Supabase project  
-- Ensure **all environment variables** are set correctly in Supabase and in your frontend hosting provider  
-- Point your frontend’s env vars to the production Supabase project  
-
----
-
-## Contributing
-
-- **Issues & ideas**: open a GitHub issue describing the feature/bug.
-- **Pull requests**: fork the repo, create a feature branch, and open a PR with a clear description and screenshots where applicable.
-
----
-
-## License
-
-Add your preferred license here (e.g. MIT) or link to a `LICENSE` file once chosen.
