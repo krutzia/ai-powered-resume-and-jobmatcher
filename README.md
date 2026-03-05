@@ -1,57 +1,191 @@
-# ResuMatch
+## ResuMatch – AI-Powered Resume & Job Matcher
 
-## Project info
+ResuMatch helps job seekers **analyze their resume against any job description**, get an **ATS-style match score**, and discover **curated job opportunities** that match their skills.  
 
-## How can I edit this code?
+Upload a PDF/DOCX resume, paste a job description, and ResuMatch will:
 
-There are several ways of editing your application.
+- **Score your match** before and after optimization  
+- **Highlight missing skills & keywords**  
+- **Generate an optimized resume version**  
+- **Provide AI insights** on what changed and why  
+- **Recommend matched jobs** from multiple sources with per-job match scores  
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes to your own Git remote.
+## Features
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **AI Resume Analysis**
+  - Upload resume (PDF/DOCX) with validation (type & size)
+  - Secure storage in Supabase Storage
+  - AI-powered comparison of resume vs. job description
+  - Match score before/after optimization (ATS-style)
+  - Detailed improvement suggestions
+  - Side-by-side original vs. optimized resume view
+  - Download optimized resume
 
-Follow these steps:
+- **Job Recommendations**
+  - Fetches jobs via Supabase Edge Function (`fetch-jobs`)
+  - Per-job **match score** and **matched/missing skills**
+  - Smart filters: match %, location, work type, experience level, provider
+  - Supports multiple sources (e.g. LinkedIn, Instahyre, Naukri, Wellfound)
+  - Quick-apply links + local “saved job” state
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+- **User Accounts & Dashboard**
+  - Email/password authentication with Supabase Auth
+  - Protected routes for Dashboard & Jobs
+  - Stores analyses in Supabase (resumes, analyses tables)
+
+- **Modern UI/UX**
+  - React + Vite + TypeScript
+  - shadcn-ui + Radix primitives
+  - Tailwind CSS + animations + Framer Motion
+
+---
+
+## Tech Stack
+
+- **Frontend**
+  - React 18, TypeScript
+  - Vite
+  - React Router
+  - Tailwind CSS, shadcn-ui, Radix UI, Framer Motion
+  - TanStack Query for data fetching
+
+- **Backend / Infra**
+  - **Supabase**
+    - Auth (email/password)
+    - Postgres (resumes, analyses, jobs, etc.)
+    - Storage (resume files)
+    - Edge Functions:
+      - `analyze-resume` – calls AI provider to score/optimize resumes
+      - `fetch-jobs` – fetches and scores jobs against resume skills
+  - AI provider via HTTPS (configured with `AI_API_KEY` in Supabase function env)
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js** (LTS recommended) and **npm**
+- A **Supabase project** with:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+- In Supabase Edge Functions, configure:
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `AI_API_KEY` (for the AI model used in `analyze-resume`)
+
+### 1. Clone & Install
+
+```bash
 git clone <YOUR_GIT_URL>
+cd ai-powered-resume-and-jobmatcher
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 2. Configure Environment (Frontend)
 
-# Step 3: Install the necessary dependencies.
-npm i
+Create a `.env` file in the project root (not committed to Git) and set at least:
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+VITE_SUPABASE_URL=<your-supabase-url>
+VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+```
+
+Make sure these match the Supabase project where your database, storage, and edge functions live.
+
+### 3. Configure Supabase Edge Functions
+
+In your Supabase project:
+
+- Deploy the functions from the `supabase/functions` directory:
+  - `analyze-resume`
+  - `fetch-jobs`
+- Set environment variables for each function:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `AI_API_KEY`
+
+Also apply the SQL migrations under `supabase/migrations` to create the required tables (e.g. `resumes`, `analyses`, any job tables if present).
+
+### 4. Run the App Locally
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open the URL printed in the terminal (typically `http://localhost:5173`) and:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+1. Sign up via the Auth page  
+2. Upload a resume on the Dashboard  
+3. Paste a job description and run an analysis  
+4. View recommended jobs on the Jobs page  
 
-**Use GitHub Codespaces**
+### 5. Run Tests
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+npm test
+```
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## Project Structure (High Level)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```text
+src/
+  main.tsx           # App bootstrap
+  App.tsx            # Routes & layout
+  pages/
+    Index.tsx        # Marketing/landing page
+    Auth.tsx         # Login / signup
+    Dashboard.tsx    # Resume upload & analysis
+    Jobs.tsx         # Job recommendations & filters
+  components/
+    AIInsightsPanel.tsx
+    ATSScoreImpact.tsx
+    ResumeComparison.tsx
+    ScoreCircle.tsx
+    SkillBadge.tsx
+    DownloadResumeButton.tsx
+    ui/              # shadcn-ui components
+  integrations/
+    supabase/
+      client.ts      # Supabase client config
+      types.ts       # Generated types (if any)
 
-## How can I deploy this project?
+supabase/
+  functions/
+    analyze-resume/  # AI analysis edge function
+    fetch-jobs/      # Job fetch & scoring
+  migrations/        # Database schema & migrations
+```
 
-You can deploy this project to any modern frontend hosting provider (e.g. Vercel, Netlify, Cloudflare Pages) by building with Vite and serving the `dist` directory.
+---
+
+## Deployment
+
+You can deploy the frontend to any modern static hosting provider (e.g. **Vercel**, **Netlify**, **Cloudflare Pages**) by building the app and serving the `dist` folder:
+
+```bash
+npm run build
+```
+
+For production:
+
+- Deploy Supabase functions (`analyze-resume`, `fetch-jobs`) to your Supabase project  
+- Ensure **all environment variables** are set correctly in Supabase and in your frontend hosting provider  
+- Point your frontend’s env vars to the production Supabase project  
+
+---
+
+## Contributing
+
+- **Issues & ideas**: open a GitHub issue describing the feature/bug.
+- **Pull requests**: fork the repo, create a feature branch, and open a PR with a clear description and screenshots where applicable.
+
+---
+
+## License
+
+Add your preferred license here (e.g. MIT) or link to a `LICENSE` file once chosen.
