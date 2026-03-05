@@ -42,22 +42,22 @@ You upload your resume (PDF or DOCX), paste in a job description, and the app:
 ## Screenshots
 
 ### Landing Page
-![Landing Page](screenshots/Landing%20Page.png)
+![Landing Page](screenshots/SS/Landing%20Page.png)
 
 ### Authentication
-![Authentication](screenshots/Authentication.png)
+![Authentication](screenshots/SS/Authentication.png)
 
 ### Dashboard
-![Dashboard](screenshots/Dashboard.png)
+![Dashboard](screenshots/SS/Dashboard.png)
 
 ### AI Analysis
-![AI Analysis](screenshots/AI%20Analysis.png)
+![AI Analysis](screenshots/SS/AI%20Analysis.png)
 
 ### Resume Comparison
-![Comparison](screenshots/Resume%20Comparison.png)
+![Comparison](screenshots/SS/Resume%20Comparison.png)
 
 ### Optimized Resume Download
-![Download](screenshots/Optimized%20Resume.png)
+![Download](screenshots/SS/Optimized%20Resume%20Download.png)
 
 ---
 
