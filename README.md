@@ -182,6 +182,13 @@ supabase/
 
 ---
 
+## Live Demo
+
+Try the app here:  
+https://ai-powered-resume-and-jobmatcher.vercel.app
+
+---
+
 ## Author
 
 Kashish  
