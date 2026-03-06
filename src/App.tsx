@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/react"
 import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -38,6 +39,9 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+        
+        <Analytics />
+
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Index />} />
